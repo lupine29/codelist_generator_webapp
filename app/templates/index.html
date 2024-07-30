@@ -1,0 +1,23 @@
+<!-- app/templates/index.html -->
+
+{% extends "base.html" %}
+
+{% block content %}
+<form action="{{ url_for('search') }}" method="get">
+    <input type="text" name="query" placeholder="Enter search terms (comma-separated)">
+    <select name="search_type">
+        <option value="partial">Partial Match</option>
+        <option value="exact">Exact Match</option>
+        <option value="starts_with">Starts With</option>
+        <option value="ends_with">Ends With</option>
+    </select>
+    <fieldset>
+        <legend>Search in:</legend>
+        <input type="checkbox" name="columns" value="Description" checked> Description
+        <input type="checkbox" name="columns" value="Codelist_Name" checked> Codelist Name
+        <input type="checkbox" name="columns" value="SNOMED_CT_Concept_ID"> SNOMED CT Concept ID
+        <input type="checkbox" name="columns" value="Med_Code_ID"> Med Code ID
+    </fieldset>
+    <button type="submit">Search</button>
+</form>
+{% endblock %}

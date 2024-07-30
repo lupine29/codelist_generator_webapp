@@ -1,0 +1,76 @@
+<!-- app/templates/results.html -->
+
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Search Results</h2>
+<p>Search query: {{ query }}</p>
+<p>Search type: {{ search_type }}</p>
+<p>Columns searched: {{ ', '.join(columns) }}</p>
+<p>Total results: {{ total_count }}</p>
+
+{% if results %}
+    <h3>Results Distribution</h3>
+    <canvas id="resultsChart" width="400" height="200"></canvas>
+
+    <p>
+        <a href="{{ url_for('export', query=query, search_type=search_type, columns=columns) }}">Export All Results</a> |
+        <a href="{{ url_for('export_unique', query=query, search_type=search_type, columns=columns) }}">Export Unique SNOMED Results</a>
+    </p>
+
+    <ul>
+    {% for result in results %}
+        <li>
+            <strong>{{ result['Description'] }}</strong><br>
+            SNOMED CT: {{ result['SNOMED_CT_Concept_ID'] }}<br>
+            MedCode ID: {{ result['Med_Code_ID'] }}<br>
+            Codelist: {{ result['Codelist_Name'] }}
+        </li>
+    {% endfor %}
+    </ul>
+
+    <!-- Pagination -->
+    <div class="pagination">
+        {% if page > 1 %}
+            <a href="{{ url_for('search', query=query, search_type=search_type, columns=columns, page=page-1) }}">Previous</a>
+        {% endif %}
+        
+        Page {{ page }} of {{ total_pages }}
+        
+        {% if page < total_pages %}
+            <a href="{{ url_for('search', query=query, search_type=search_type, columns=columns, page=page+1) }}">Next</a>
+        {% endif %}
+    </div>
+
+    <script>
+        var ctx = document.getElementById('resultsChart').getContext('2d');
+        var chart = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: {{ chart_data.labels | tojson }},
+                datasets: [{
+                    data: {{ chart_data.data | tojson }},
+                    backgroundColor: [
+                        'rgba(255, 99, 132, 0.8)',
+                        'rgba(54, 162, 235, 0.8)',
+                        'rgba(255, 206, 86, 0.8)',
+                        'rgba(75, 192, 192, 0.8)',
+                        'rgba(153, 102, 255, 0.8)',
+                    ],
+                }]
+            },
+            options: {
+                responsive: true,
+                title: {
+                    display: true,
+                    text: 'Distribution of Results by Codelist'
+                }
+            }
+        });
+    </script>
+{% else %}
+    <p>No results found.</p>
+{% endif %}
+
+<a href="{{ url_for('index') }}">Back to Search</a>
+{% endblock %}
