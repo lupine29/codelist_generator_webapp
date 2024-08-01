@@ -1,76 +1,155 @@
-<!-- app/templates/results.html -->
-
 {% extends "base.html" %}
 
 {% block content %}
-<h2>Search Results</h2>
-<p>Search query: {{ query }}</p>
-<p>Search type: {{ search_type }}</p>
-<p>Columns searched: {{ ', '.join(columns) }}</p>
-<p>Total results: {{ total_count }}</p>
+<h2 class="mb-4">Search Results</h2>
+<div class="row">
+    <div class="col-md-6">
+        <p><strong>Search query:</strong> {{ query }}</p>
+        <p><strong>Search type:</strong> {{ search_type }}</p>
+        <p><strong>Columns searched:</strong> {{ ', '.join(columns) }}</p>
+        <p><strong>Total results:</strong> {{ total_count }}</p>
+        <p><strong>Fuzzy matching:</strong> {{ 'Enabled' if request.args.get('use_fuzzy') == 'true' else 'Disabled' }}</p>
+    </div>
+</div>
+
+{% if no_results_message %}
+    <div class="alert alert-info" role="alert">
+        {{ no_results_message }}
+    </div>
+    <a href="{{ url_for('index') }}" class="btn btn-primary">Back to Search</a>
 
 {% if results %}
-    <h3>Results Distribution</h3>
-    <canvas id="resultsChart" width="400" height="200"></canvas>
-
-    <p>
-        <a href="{{ url_for('export', query=query, search_type=search_type, columns=columns) }}">Export All Results</a> |
-        <a href="{{ url_for('export_unique', query=query, search_type=search_type, columns=columns) }}">Export Unique SNOMED Results</a>
-    </p>
-
-    <ul>
-    {% for result in results %}
-        <li>
-            <strong>{{ result['Description'] }}</strong><br>
-            SNOMED CT: {{ result['SNOMED_CT_Concept_ID'] }}<br>
-            MedCode ID: {{ result['Med_Code_ID'] }}<br>
-            Codelist: {{ result['Codelist_Name'] }}
-        </li>
-    {% endfor %}
-    </ul>
-
-    <!-- Pagination -->
-    <div class="pagination">
-        {% if page > 1 %}
-            <a href="{{ url_for('search', query=query, search_type=search_type, columns=columns, page=page-1) }}">Previous</a>
-        {% endif %}
-        
-        Page {{ page }} of {{ total_pages }}
-        
-        {% if page < total_pages %}
-            <a href="{{ url_for('search', query=query, search_type=search_type, columns=columns, page=page+1) }}">Next</a>
-        {% endif %}
+    <div class="mt-4 mb-4">
+        <a href="{{ url_for('export', query=query, search_type=search_type, columns=columns, use_fuzzy=request.args.get('use_fuzzy')) }}" class="btn btn-secondary">Export All Results</a>
+        <a href="{{ url_for('export_unique', query=query, search_type=search_type, columns=columns, use_fuzzy=request.args.get('use_fuzzy')) }}" class="btn btn-secondary">Export Unique SNOMED Results</a>
+        <a href="{{ url_for('search', query=query, search_type=search_type, columns=columns, sort_by='snomed', use_fuzzy=request.args.get('use_fuzzy')) }}" class="btn btn-secondary">
+            Sort by Unique SNOMED Codes
+        </a>
     </div>
 
+    <div class="row mt-5">
+        <div class="col-md-8">
+            <h3>Results Visualization</h3>
+            <div class="mb-3">
+                <label for="chartType" class="form-label">Chart Type:</label>
+                <select id="chartType" class="form-select">
+                    <option value="pie">Pie Chart</option>
+                    <option value="bar">Bar Chart</option>
+                    <option value="doughnut">Doughnut Chart</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label for="datasetType" class="form-label">Dataset:</label>
+                <select id="datasetType" class="form-select">
+                    <option value="codelist">Codelist Distribution</option>
+                    <option value="source">Source Distribution</option>
+                    <option value="snomed">Top SNOMED Codes</option>
+                </select>
+            </div>
+            <canvas id="resultsChart"></canvas>
+        </div>
+        <div class="col-md-4">
+            <h3>Overall Statistics</h3>
+            <p>Total Results: {{ total_count }}</p>
+            <p>Unique SNOMED Codes: {{ results|map(attribute='SNOMED_CT_Concept_ID')|unique|list|length }}</p>
+        </div>
+    </div>
+
+    <h3 class="mt-5">Search Results</h3>
+    <div class="list-group">
+    {% for result in results %}
+        <div class="list-group-item">
+            <h5 class="mb-1">{{ result['Description'] }}</h5>
+            <p class="mb-1"><strong>SNOMED CT:</strong> {{ result['SNOMED_CT_Concept_ID'] }}</p>
+            <p class="mb-1"><strong>MedCode ID:</strong> {{ result['Med_Code_ID'] }}</p>
+            <p class="mb-1"><strong>Codelist:</strong> {{ result['Codelist_Name'] }}</p>
+            <p class="mb-1"><strong>Source:</strong> {{ result['Source_Codelist'] }}</p>
+        </div>
+    {% endfor %}
+    </div>
+
+    <!-- Pagination -->
+    <nav aria-label="Search results pages" class="mt-4">
+        <ul class="pagination justify-content-center">
+            {% if page > 1 %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('search', query=query, search_type=search_type, columns=columns, page=page-1, sort_by=request.args.get('sort_by'), use_fuzzy=request.args.get('use_fuzzy')) }}">Previous</a>
+                </li>
+            {% endif %}
+            
+            <li class="page-item disabled">
+                <span class="page-link">Page {{ page }} of {{ total_pages }}</span>
+            </li>
+            
+            {% if page < total_pages %}
+                <li class="page-item">
+                    <a class="page-link" href="{{ url_for('search', query=query, search_type=search_type, columns=columns, page=page+1, sort_by=request.args.get('sort_by'), use_fuzzy=request.args.get('use_fuzzy')) }}">Next</a>
+                </li>
+            {% endif %}
+        </ul>
+    </nav>
+
     <script>
-        var ctx = document.getElementById('resultsChart').getContext('2d');
-        var chart = new Chart(ctx, {
-            type: 'pie',
-            data: {
-                labels: {{ chart_data.labels | tojson }},
-                datasets: [{
-                    data: {{ chart_data.data | tojson }},
-                    backgroundColor: [
-                        'rgba(255, 99, 132, 0.8)',
-                        'rgba(54, 162, 235, 0.8)',
-                        'rgba(255, 206, 86, 0.8)',
-                        'rgba(75, 192, 192, 0.8)',
-                        'rgba(153, 102, 255, 0.8)',
-                    ],
-                }]
-            },
-            options: {
-                responsive: true,
-                title: {
-                    display: true,
-                    text: 'Distribution of Results by Codelist'
-                }
+        let chart;
+        
+        function updateChart() {
+            const chartType = document.getElementById('chartType').value;
+            const datasetType = document.getElementById('datasetType').value;
+            
+            let labels, data;
+            
+            if (datasetType === 'codelist') {
+                 labels = {{ chart_data.codelist.labels | tojson }};
+                 data = {{ chart_data.codelist.data | tojson }};
+            } else if (datasetType === 'source') {
+                labels = {{ chart_data.source.labels | tojson }};
+                data = {{ chart_data.source.data | tojson }};
+            } else if (datasetType === 'snomed') {
+              // You might want to add similar logic for SNOMED distribution
+                labels = ['SNOMED data not available'];
+                data = [0];
             }
-        });
-    </script>
+            
+            if (chart) {
+                chart.destroy();
+            }
+            
+            const ctx = document.getElementById('resultsChart').getContext('2d');
+            chart = new Chart(ctx, {
+                type: chartType,
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: [
+                            'rgba(255, 99, 132, 0.8)',
+                            'rgba(54, 162, 235, 0.8)',
+                            'rgba(255, 206, 86, 0.8)',
+                            'rgba(75, 192, 192, 0.8)',
+                            'rgba(153, 102, 255, 0.8)',
+                        ],
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: `${datasetType.charAt(0).toUpperCase() + datasetType.slice(1)} Distribution`
+                        }
+                    }
+                }
+            });
+        }
+        
+        document.getElementById('chartType').addEventListener('change', updateChart);
+        document.getElementById('datasetType').addEventListener('change', updateChart);
+        
+        updateChart();
+        </script>
 {% else %}
-    <p>No results found.</p>
+    <p class="alert alert-info mt-4">No results found.</p>
 {% endif %}
 
-<a href="{{ url_for('index') }}">Back to Search</a>
+<a href="{{ url_for('index') }}" class="btn btn-primary mt-4">Back to Search</a>
 {% endblock %}

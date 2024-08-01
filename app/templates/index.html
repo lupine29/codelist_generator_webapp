@@ -1,23 +1,124 @@
-<!-- app/templates/index.html -->
-
 {% extends "base.html" %}
 
 {% block content %}
-<form action="{{ url_for('search') }}" method="get">
-    <input type="text" name="query" placeholder="Enter search terms (comma-separated)">
-    <select name="search_type">
-        <option value="partial">Partial Match</option>
-        <option value="exact">Exact Match</option>
-        <option value="starts_with">Starts With</option>
-        <option value="ends_with">Ends With</option>
-    </select>
-    <fieldset>
-        <legend>Search in:</legend>
-        <input type="checkbox" name="columns" value="Description" checked> Description
-        <input type="checkbox" name="columns" value="Codelist_Name" checked> Codelist Name
-        <input type="checkbox" name="columns" value="SNOMED_CT_Concept_ID"> SNOMED CT Concept ID
-        <input type="checkbox" name="columns" value="Med_Code_ID"> Med Code ID
-    </fieldset>
-    <button type="submit">Search</button>
-</form>
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <form action="{{ url_for('search') }}" method="get" class="mt-4">
+            <div class="mb-3">
+                <label for="query" class="form-label">Enter search terms:</label>
+                <input type="text" class="form-control" id="query" name="query" placeholder='e.g., diabetes AND hypertension, "heart disease" OR "cardiac condition"'>
+                <small class="form-text text-muted">Use AND, OR, NOT for boolean search. Use quotes for exact phrases.</small>
+            </div>
+            <div class="mb-3">
+                <label for="search_type" class="form-label">Search type:</label>
+                <select class="form-select" id="search_type" name="search_type">
+                    <option value="partial">Partial Match</option>
+                    <option value="exact">Exact Match</option>
+                    <option value="starts_with">Starts With</option>
+                    <option value="ends_with">Ends With</option>
+                </select>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Search in:</label>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="columns" value="Description" id="descriptionCheck" checked>
+                    <label class="form-check-label" for="descriptionCheck">Description</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="columns" value="Codelist_Name" id="codelistCheck" checked>
+                    <label class="form-check-label" for="codelistCheck">Codelist Name</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="columns" value="SNOMED_CT_Concept_ID" id="snomedCheck">
+                    <label class="form-check-label" for="snomedCheck">SNOMED CT Concept ID</label>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="columns" value="Med_Code_ID" id="medCodeCheck">
+                    <label class="form-check-label" for="medCodeCheck">Med Code ID</label>
+                </div>
+            </div>
+            <div class="mb-3 form-check">
+                <input type="checkbox" class="form-check-input" id="useFuzzy" name="use_fuzzy" value="true">
+                <label class="form-check-label" for="useFuzzy">Use fuzzy matching</label>
+            </div>
+            <button type="submit" class="btn btn-primary">Search</button>
+        </form>
+    </div>
+</div>
+
+<div class="row mt-5">
+    <div class="col-md-6">
+        <h3>Overall Statistics</h3>
+        <p>Total Codes: {{ stats.total_codes }}</p>
+        <p>Unique SNOMED Codes: {{ stats.unique_snomed }}</p>
+    </div>
+    <div class="col-md-6">
+        <h3>Top 5 Sources</h3>
+        <canvas id="sourcesChart"></canvas>
+    </div>
+</div>
+<div class="row mt-3">
+    <div class="col-md-12">
+        <h3>Top 5 Largest Codelists</h3>
+        <canvas id="codelistsChart"></canvas>
+    </div>
+</div>
+
+<script>
+    // Chart for top sources
+    var sourcesCtx = document.getElementById('sourcesChart').getContext('2d');
+    new Chart(sourcesCtx, {
+        type: 'pie',
+        data: {
+            labels: {{ stats.top_sources|map(attribute=0)|list|tojson }},
+            datasets: [{
+                data: {{ stats.top_sources|map(attribute=1)|list|tojson }},
+                backgroundColor: [
+                    'rgba(255, 99, 132, 0.8)',
+                    'rgba(54, 162, 235, 0.8)',
+                    'rgba(255, 206, 86, 0.8)',
+                    'rgba(75, 192, 192, 0.8)',
+                    'rgba(153, 102, 255, 0.8)',
+                ],
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Top 5 Sources'
+                }
+            }
+        }
+    });
+
+    // Chart for top codelists
+    var codelistsCtx = document.getElementById('codelistsChart').getContext('2d');
+    new Chart(codelistsCtx, {
+        type: 'bar',
+        data: {
+            labels: {{ stats.top_codelists|map(attribute=0)|list|tojson }},
+            datasets: [{
+                label: 'Number of Codes',
+                data: {{ stats.top_codelists|map(attribute=1)|list|tojson }},
+                backgroundColor: 'rgba(75, 192, 192, 0.8)',
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Top 5 Largest Codelists'
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+</script>
 {% endblock %}
