@@ -8,7 +8,7 @@
         <p><strong>Search type:</strong> {{ search_type }}</p>
         <p><strong>Columns searched:</strong> {{ ', '.join(columns) }}</p>
         <p><strong>Total results:</strong> {{ total_count }}</p>
-        <p><strong>Fuzzy matching:</strong> {{ 'Enabled' if request.args.get('use_fuzzy') == 'true' else 'Disabled' }}</p>
+        <p><strong>Unique SNOMED:</strong> {{ 'Yes' if request.args.get('unique_snomed') == 'true' else 'No' }}</p>
     </div>
 </div>
 
@@ -17,14 +17,10 @@
         {{ no_results_message }}
     </div>
     <a href="{{ url_for('index') }}" class="btn btn-primary">Back to Search</a>
-
-{% if results %}
+{% elif results %}
     <div class="mt-4 mb-4">
-        <a href="{{ url_for('export', query=query, search_type=search_type, columns=columns, use_fuzzy=request.args.get('use_fuzzy')) }}" class="btn btn-secondary">Export All Results</a>
-        <a href="{{ url_for('export_unique', query=query, search_type=search_type, columns=columns, use_fuzzy=request.args.get('use_fuzzy')) }}" class="btn btn-secondary">Export Unique SNOMED Results</a>
-        <a href="{{ url_for('search', query=query, search_type=search_type, columns=columns, sort_by='snomed', use_fuzzy=request.args.get('use_fuzzy')) }}" class="btn btn-secondary">
-            Sort by Unique SNOMED Codes
-        </a>
+       <a href="{{ url_for('export', query=query, search_type=search_type, columns=columns, use_fuzzy=request.args.get('use_fuzzy')) }}" class="btn btn-secondary">Export All Results</a>
+       <a href="{{ url_for('search', query=query, search_type=search_type, columns=columns, use_fuzzy=request.args.get('use_fuzzy'), unique_snomed='true') }}" class="btn btn-secondary">Show Unique SNOMED Codes</a>
     </div>
 
     <div class="row mt-5">
@@ -43,15 +39,9 @@
                 <select id="datasetType" class="form-select">
                     <option value="codelist">Codelist Distribution</option>
                     <option value="source">Source Distribution</option>
-                    <option value="snomed">Top SNOMED Codes</option>
                 </select>
             </div>
             <canvas id="resultsChart"></canvas>
-        </div>
-        <div class="col-md-4">
-            <h3>Overall Statistics</h3>
-            <p>Total Results: {{ total_count }}</p>
-            <p>Unique SNOMED Codes: {{ results|map(attribute='SNOMED_CT_Concept_ID')|unique|list|length }}</p>
         </div>
     </div>
 
@@ -73,7 +63,7 @@
         <ul class="pagination justify-content-center">
             {% if page > 1 %}
                 <li class="page-item">
-                    <a class="page-link" href="{{ url_for('search', query=query, search_type=search_type, columns=columns, page=page-1, sort_by=request.args.get('sort_by'), use_fuzzy=request.args.get('use_fuzzy')) }}">Previous</a>
+                    <a class="page-link" href="{{ url_for('search', query=query, search_type=search_type, columns=columns, page=page-1, sort_by=request.args.get('sort_by'), use_fuzzy=request.args.get('use_fuzzy'), unique_snomed=request.args.get('unique_snomed')) }}">Previous</a>
                 </li>
             {% endif %}
             
@@ -83,72 +73,80 @@
             
             {% if page < total_pages %}
                 <li class="page-item">
-                    <a class="page-link" href="{{ url_for('search', query=query, search_type=search_type, columns=columns, page=page+1, sort_by=request.args.get('sort_by'), use_fuzzy=request.args.get('use_fuzzy')) }}">Next</a>
+                    <a class="page-link" href="{{ url_for('search', query=query, search_type=search_type, columns=columns, page=page+1, sort_by=request.args.get('sort_by'), use_fuzzy=request.args.get('use_fuzzy'), unique_snomed=request.args.get('unique_snomed')) }}">Next</a>
                 </li>
             {% endif %}
         </ul>
     </nav>
 
     <script>
-        let chart;
+    let chart;
+
+    function updateChart() {
+        const chartType = document.getElementById('chartType').value;
+        const datasetType = document.getElementById('datasetType').value;
         
-        function updateChart() {
-            const chartType = document.getElementById('chartType').value;
-            const datasetType = document.getElementById('datasetType').value;
-            
-            let labels, data;
-            
-            if (datasetType === 'codelist') {
-                 labels = {{ chart_data.codelist.labels | tojson }};
-                 data = {{ chart_data.codelist.data | tojson }};
-            } else if (datasetType === 'source') {
-                labels = {{ chart_data.source.labels | tojson }};
-                data = {{ chart_data.source.data | tojson }};
-            } else if (datasetType === 'snomed') {
-              // You might want to add similar logic for SNOMED distribution
-                labels = ['SNOMED data not available'];
-                data = [0];
-            }
-            
-            if (chart) {
-                chart.destroy();
-            }
-            
-            const ctx = document.getElementById('resultsChart').getContext('2d');
-            chart = new Chart(ctx, {
-                type: chartType,
-                data: {
-                    labels: labels,
-                    datasets: [{
-                        data: data,
-                        backgroundColor: [
-                            'rgba(255, 99, 132, 0.8)',
-                            'rgba(54, 162, 235, 0.8)',
-                            'rgba(255, 206, 86, 0.8)',
-                            'rgba(75, 192, 192, 0.8)',
-                            'rgba(153, 102, 255, 0.8)',
-                        ],
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    plugins: {
-                        title: {
-                            display: true,
-                            text: `${datasetType.charAt(0).toUpperCase() + datasetType.slice(1)} Distribution`
-                        }
-                    }
-                }
-            });
+        let labels, data;
+        
+        if (datasetType === 'codelist') {
+            labels = {{ chart_data.codelist.labels | tojson }};
+            data = {{ chart_data.codelist.data | tojson }};
+        } else if (datasetType === 'source') {
+            labels = {{ chart_data.source.labels | tojson }};
+            data = {{ chart_data.source.data | tojson }};
         }
         
-        document.getElementById('chartType').addEventListener('change', updateChart);
-        document.getElementById('datasetType').addEventListener('change', updateChart);
+        if (chart) {
+            chart.destroy();
+        }
         
-        updateChart();
-        </script>
-{% else %}
-    <p class="alert alert-info mt-4">No results found.</p>
+        const ctx = document.getElementById('resultsChart').getContext('2d');
+        chart = new Chart(ctx, {
+            type: chartType,
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: [
+                        'rgba(255, 99, 132, 0.8)',
+                        'rgba(54, 162, 235, 0.8)',
+                        'rgba(255, 206, 86, 0.8)',
+                        'rgba(75, 192, 192, 0.8)',
+                        'rgba(153, 102, 255, 0.8)',
+                        'rgba(255, 159, 64, 0.8)',
+                        'rgba(255, 205, 86, 0.8)',
+                        'rgba(75, 192, 192, 0.8)',
+                        'rgba(54, 162, 235, 0.8)',
+                        'rgba(153, 102, 255, 0.8)'
+                    ],
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: `${datasetType.charAt(0).toUpperCase() + datasetType.slice(1)} Distribution`
+                    },
+                    legend: {
+                        display: chartType !== 'bar'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        display: chartType === 'bar'
+                    }
+                }
+            }
+        });
+    }
+
+    document.getElementById('chartType').addEventListener('change', updateChart);
+    document.getElementById('datasetType').addEventListener('change', updateChart);
+
+    updateChart();
+    </script>
 {% endif %}
 
 <a href="{{ url_for('index') }}" class="btn btn-primary mt-4">Back to Search</a>

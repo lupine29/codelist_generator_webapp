@@ -4,7 +4,6 @@ import io
 import csv
 import math
 from collections import Counter
-import re
 
 @app.route('/')
 @app.route('/index')
@@ -21,29 +20,29 @@ def search():
     per_page = 20
     sort_by = request.args.get('sort_by')
     use_fuzzy = request.args.get('use_fuzzy', 'false').lower() == 'true'
-    
-    if query:
-        terms = re.findall(r'"[^"]*"|\S+', query)
-        terms = [term.strip('"') for term in terms]
+    unique_snomed = request.args.get('unique_snomed', 'false').lower() == 'true'
+
+    # Perform search without pagination to get all results
+    all_results, total_count = perform_search(query, columns, search_type, 1, None, sort_by, use_fuzzy)
+
+    if unique_snomed:
+        # Filter for unique SNOMED codes from all results
+        unique_results = {result['SNOMED_CT_Concept_ID']: result for result in all_results}.values()
+        results = list(unique_results)
+        total_count = len(results)
     else:
-        terms = []
-    
-    results, total_count = perform_search(terms, columns, search_type, page, per_page, sort_by, use_fuzzy)
-    
-    if not results:
-        no_results_message = ("We apologize, but no results were found matching your search criteria. "
-                              "Please try again with different terms or adjust your search parameters.")
-        return render_template('results.html', 
-                               query=query, 
-                               search_type=search_type, 
-                               columns=columns,
-                               no_results_message=no_results_message)
-    
+        results = all_results
+
+    # Apply pagination after filtering
     total_pages = math.ceil(total_count / per_page)
-    
+    start = (page - 1) * per_page
+    end = start + per_page
+    paginated_results = results[start:end]
+
+    # Prepare data for visualizations using all results
     codelist_counts = Counter(result['Codelist_Name'] for result in results)
     source_counts = Counter(result['Source_Codelist'] for result in results)
-
+    
     chart_data = {
         'codelist': {
             'labels': list(codelist_counts.keys()),
@@ -55,15 +54,25 @@ def search():
         }
     }
     
+    if not results:
+        no_results_message = ("We apologize, but no results were found matching your search criteria. "
+                              "Please try again with different terms or adjust your search parameters.")
+        return render_template('results.html', 
+                               query=query, 
+                               search_type=search_type, 
+                               columns=columns,
+                               no_results_message=no_results_message)
+    
     return render_template('results.html', 
-                           results=results, 
+                           results=paginated_results, 
                            query=query, 
                            search_type=search_type, 
                            columns=columns,
                            page=page,
                            total_pages=total_pages,
                            total_count=total_count,
-                           chart_data=chart_data)
+                           chart_data=chart_data,
+                           unique_snomed=unique_snomed)
 
 @app.route('/export', methods=['GET'])
 def export():
@@ -71,10 +80,9 @@ def export():
     search_type = request.args.get('search_type', 'partial')
     columns = request.args.getlist('columns') or ['Description', 'Codelist_Name']
     use_fuzzy = request.args.get('use_fuzzy', 'false').lower() == 'true'
+    unique_snomed = request.args.get('unique_snomed', 'false').lower() == 'true'
     
-    terms = [term.strip() for term in re.split(r'\s+(?=(?:[^"]*"[^"]*")*[^"]*$)', query) if term.strip()]
-    
-    results, _ = perform_search(terms, columns, search_type, page=1, per_page=1000000, use_fuzzy=use_fuzzy)  # Large per_page to get all results
+    results, _ = perform_search(query, columns, search_type, page=1, per_page=None, use_fuzzy=use_fuzzy, unique_snomed=unique_snomed)
     
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=results[0].keys() if results else [])
@@ -96,11 +104,8 @@ def export_unique():
     columns = request.args.getlist('columns') or ['Description', 'Codelist_Name']
     use_fuzzy = request.args.get('use_fuzzy', 'false').lower() == 'true'
     
-    terms = [term.strip() for term in re.split(r'\s+(?=(?:[^"]*"[^"]*")*[^"]*$)', query) if term.strip()]
+    results, _ = perform_search(query, columns, search_type, page=1, per_page=1000000, use_fuzzy=use_fuzzy)
     
-    results, _ = perform_search(terms, columns, search_type, page=1, per_page=1000000, use_fuzzy=use_fuzzy)  # Large per_page to get all results
-    
-    # Get unique results based on SNOMED_CT_Concept_ID
     unique_results = {row['SNOMED_CT_Concept_ID']: row for row in results}.values()
     
     output = io.StringIO()
